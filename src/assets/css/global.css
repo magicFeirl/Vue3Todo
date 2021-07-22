@@ -1,0 +1,22 @@
+* {
+  font-family: Arial, Helvetica, 'Microsoft YaHei', sans-serif;
+  box-sizing: border-box;
+}
+
+body,
+html {
+  margin: 0;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #9F9F9F;
+  border-radius: 10px;
+}
