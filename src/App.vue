@@ -5,26 +5,73 @@
       <div class="tabbar-list">
         <div
           class="tabbar-item"
-          :class="{ 'tabbar-active': currentTabIdx === parseInt(key) }"
+          :class="{ 'tabbar-active': isActiveTabbar(parseInt(key)) }"
           v-for="(item, key) in tabs"
           :key="key"
-          @click="onSwitchTab(parseInt(key))"
         >
-          <div class="tabbar-item-content">
-            <span><i class="fa fa-list-ul"></i>{{ item.name }}</span
-            ><span style="color: #aaa"> {{ item.todoList.length || "" }}</span>
+          <div class="tabbar-item-content" v-if="!!item">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 1fr 9fr;
+                align-items: center;
+              "
+              @click="onSwitchTab(parseInt(key))"
+            >
+              <i class="fa fa-list-ul" style="margin-top: 2px"></i
+              ><editable-content
+                class="edit-todo"
+                :edit="isEditingTab && isActiveTabbar(parseInt(key))"
+                v-model="item.name"
+                @blur="cancelEditTab"
+                @keyup.enter="cancelEditTab"
+                ><span @dblclick.prevent="editTabbarItem">{{
+                  item.name
+                }}</span></editable-content
+              >
+            </div>
+            <div class="tab-opt">
+              <span class="todo-count"> {{ item.todoList.length }} </span>
+              <span
+                class="delete-tab"
+                @click.prevent="deleteTab(parseInt(key))"
+              >
+                <i class="fa fa-trash"></i>
+              </span>
+            </div>
           </div>
         </div>
       </div>
-      <div class="add-tabbar-item" @click="addTabbar('未命名')">
+      <div class="add-tabbar-item" @click="addTabbar('双击重命名')">
         <i class="fa fa-plus"></i>新建分类
       </div>
     </div>
-
     <!-- 右侧todolist -->
     <div class="todolist-container">
       <h3 class="title">
-        {{ todoTitle }}<i class="fa fa-plus" @click="addTodoItem"></i>
+        {{ todoTitle }}
+        <div class="todo-opt">
+          <span
+            :class="{ 'active-filter': filterType === 'all' }"
+            @click="filterTodo('all')"
+            >全部</span
+          >
+          <span
+            :class="{ 'active-filter': filterType === 'undo' }"
+            @click="filterTodo('undo')"
+            >未完成</span
+          >
+          <span
+            :class="{ 'active-filter': filterType === 'done' }"
+            @click="filterTodo('done')"
+            >已完成</span
+          >
+          <i
+            class="fa fa-plus"
+            :class="{ disabled: filterType !== 'all' }"
+            @click="addTodoItem"
+          />
+        </div>
       </h3>
       <div class="todo-list">
         <div
@@ -33,20 +80,24 @@
           v-for="(todo, idx) in computedTodoList"
           :key="idx"
         >
-          <input type="checkbox" v-model="todo.finished" :key="idx" />
+          <input
+            type="checkbox"
+            v-model="todo.finished"
+            :key="todo.content + idx"
+          />
           <div>
-            <span v-if="!isEditingCurrentTodo(idx)" class="content">{{
-              todo.content
-            }}</span>
-            <input
-              placeholder="what's up?"
-              autofocus
+            <editable-content
               class="edit-todo"
+              autofoucs
               v-model="todo.content"
               @blur="cancelEdit(idx)"
               @keyup.enter="cancelEdit(idx)"
-              v-else
-            />
+              :edit="isEditingCurrentTodo(idx)"
+            >
+              <span class="content" @click="editTodo(idx)">{{
+                todo.content
+              }}</span>
+            </editable-content>
           </div>
           <i class="fa fa-edit" @click="editTodo(idx)"></i>
           <i class="fa fa-trash" @click="deleteTodo(idx)"></i>
@@ -77,7 +128,7 @@ interface todoTabList {
   [key: number]: todoTabItem;
 }
 
-const tabs: todoTabList = reactive({
+let tabs: todoTabList = reactive({
   1: {
     name: "待办",
     todoList: [
@@ -91,9 +142,14 @@ const tabs: todoTabList = reactive({
         tabId: 1,
         finished: false,
       },
+      {
+        content: "fix option header",
+        tabId: 1,
+        finished: false,
+      },
     ],
   },
-  2: {
+  3: {
     name: "进行中",
     todoList: [
       {
@@ -105,13 +161,38 @@ const tabs: todoTabList = reactive({
   },
 });
 
-import { ref, computed, reactive } from "vue";
+type todoFilter = "all" | "done" | "undo";
+
+import { ref, computed, reactive, watch } from "vue";
+import EditableContent from "@/components/EditableContent.vue";
 
 export default defineComponent({
   name: "App",
+  components: {
+    EditableContent,
+  },
   setup() {
     const currentTabIdx = ref(1);
+    const isEditingTab = ref(false);
     const todoTitle = ref(tabs[currentTabIdx.value].name);
+
+    const isActiveTabbar = (idx: number) => {
+      return currentTabIdx.value === idx;
+    };
+
+    const deleteTab = (key: number) => {
+      currentTabIdx.value = 0;
+
+      delete tabs[key];
+    };
+
+    const editTabbarItem = () => {
+      isEditingTab.value = true;
+    };
+
+    const cancelEditTab = () => {
+      isEditingTab.value = false;
+    };
 
     const currentTab = computed(() => {
       return tabs[currentTabIdx.value];
@@ -134,9 +215,24 @@ export default defineComponent({
       computedTodoList.value.splice(idx, 1);
     };
 
+    const filterType = ref<todoFilter>("all");
+    const filterTodo = (type: todoFilter) => {
+      filterType.value = type;
+    };
+
     // 当前 todo list
     const computedTodoList = computed(() => {
-      return currentTab.value.todoList;
+      if (!currentTab.value) {
+        return [];
+      }
+
+      if (filterType.value === "all") {
+        return currentTab.value.todoList;
+      } else if (filterType.value === "done") {
+        return currentTab.value.todoList.filter((x) => x.finished);
+      } else {
+        return currentTab.value.todoList.filter((x) => !x.finished);
+      }
     });
 
     const onSwitchTab = (tabId: number) => {
@@ -152,8 +248,16 @@ export default defineComponent({
     };
 
     const addTabbar = (name: string) => {
-      const id = Object.keys(tabs).length + 1;
-      tabs[id + 1] = {
+      let id;
+      const keys = Object.keys(tabs).sort();
+
+      if (!keys.length) {
+        id = 1;
+      } else {
+        id = Number(keys[keys.length - 1]) + 1;
+      }
+
+      tabs[id] = {
         name,
         todoList: [],
       };
@@ -168,20 +272,21 @@ export default defineComponent({
     };
 
     const addTodoItem = () => {
-      // 添加自动编辑todo
+      // 添加自动编辑todo，限定只能在 all tab 下添加 todo
+      if (filterType.value !== "all") {
+        return;
+      }
       const lastTodoIdx = computedTodoList.value.length;
       if (
         lastTodoIdx === 0 ||
         computedTodoList.value[lastTodoIdx - 1].content
       ) {
         editTodo(lastTodoIdx);
-        computedTodoList.value.push(
-          reactive({
-            content: "",
-            finished: false,
-            tabId: currentTabIdx.value,
-          })
-        );
+        computedTodoList.value.push({
+          content: "",
+          finished: false,
+          tabId: currentTabIdx.value,
+        });
       }
     };
 
@@ -192,6 +297,13 @@ export default defineComponent({
       tabs,
       isEditing,
       currentEditingTodoIdx,
+      isEditingTab,
+      filterType,
+      filterTodo,
+      deleteTab,
+      cancelEditTab,
+      editTabbarItem,
+      isActiveTabbar,
       cancelEdit,
       onSwitchTab,
       addTodoItem,
@@ -206,16 +318,48 @@ export default defineComponent({
 </script>
 
 <style lang="less">
-.tabbar-container,
-.todolist-container {
-  max-height: 100%;
-  overflow: auto;
+.disabled {
+  color: #ccc !important;
+  cursor: default !important;
+}
+
+.todo-opt {
+  span,
+  i {
+    margin-right: 10px;
+    display: inline-block;
+    cursor: pointer;
+  }
+
+  span {
+    color: #aaa;
+    font-size: 14px;
+  }
+
+  .active-filter {
+    color: #666;
+  }
 }
 
 .tabbar-container {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+
+  .tab-opt {
+    color: #aaa;
+    .delete-tab {
+      display: none;
+    }
+
+    &:hover .delete-tab {
+      display: inline;
+    }
+
+    &:hover .todo-count {
+      display: none;
+    }
+  }
 
   .add-tabbar-item,
   .tabbar-item {
@@ -245,8 +389,19 @@ export default defineComponent({
   align-items: center;
 }
 
+.edit-todo {
+  width: 100% !important;
+  outline: none;
+  border: none;
+  font-size: inherit;
+  background: inherit;
+  color: #444;
+  font-style: italic;
+}
+
 .todolist-container {
   @fontSize: 16px;
+  @titleHeight: 20px;
   margin-left: 10px;
 
   .finished .content {
@@ -258,18 +413,11 @@ export default defineComponent({
     font-size: @fontSize;
     padding: 15px 10px;
     background: white;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
     border-radius: 5px;
     display: grid;
     grid-template-columns: 1fr 17fr 1fr 1fr;
     align-items: center;
-
-    .edit-todo {
-      width: 100%;
-      outline: none;
-      border: none;
-      font-size: 16px;
-    }
 
     &:hover i {
       display: inline;
@@ -302,6 +450,7 @@ export default defineComponent({
     display: flex;
     justify-content: space-between;
     padding: 0 5px;
+    height: @titleHeight;
   }
 }
 
@@ -316,6 +465,8 @@ export default defineComponent({
   background-color: rgb(243, 244, 246);
   font-size: 14px;
   padding: 20px;
+  overflow: auto;
+  max-height: 100%;
 }
 
 .container {
